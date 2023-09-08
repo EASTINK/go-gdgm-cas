@@ -14,10 +14,14 @@ import (
 	"github.com/go-rod/rod/lib/proto"
 )
 
+var (
+	cas_sfrz = "https://sfrz.gdgm.cn/authserver/login?service=https://eportal.gdgm.cn/login?service=https://eportal.gdgm.cn/new/index.html?browser=no"
+)
+
 type CAS struct {
 	Username   string
 	Password   string
-	savedir    string
+	Savedir    string
 	API_KEY    string
 	SECRET_KEY string
 	WaitTime   int64
@@ -29,7 +33,7 @@ func NewCAS(username string, password string, savedir string, waittime int64,
 	return &CAS{
 		Username:   username,
 		Password:   password,
-		savedir:    savedir,
+		Savedir:    savedir,
 		WaitTime:   waittime,
 		API_KEY:    ocr_api_key,
 		SECRET_KEY: ocr_sec_key,
@@ -90,7 +94,7 @@ func (g *CAS) CaptchCode(imgpath string) string {
 
 // 返回验证码的base64格式
 func (g *CAS) capbase64() string {
-	imageBytes, err := os.ReadFile(g.savedir + "/captcha.jpg")
+	imageBytes, err := os.ReadFile(g.Savedir + "/captcha.jpg")
 	if err != nil {
 		fmt.Println("打开验证码图片失败:", err)
 		return ""
@@ -125,12 +129,12 @@ func (g *CAS) SaveCookies() {
 		fmt.Println("读取客户端Cookies失败")
 		return
 	}
-	savebytes(data, g.savedir+"/Cookies.json", "客户端Cookies已保存")
+	savebytes(data, g.Savedir+"/Cookies.json", "客户端Cookies已保存")
 }
 
 // 加载Cookies
 func (g *CAS) loadCookies(browser *rod.Browser) {
-	data, err := os.ReadFile(g.savedir + "/Cookies.json")
+	data, err := os.ReadFile(g.Savedir + "/Cookies.json")
 	if err != nil {
 		fmt.Println("读取本地Cookies失败.")
 		return
@@ -154,7 +158,7 @@ func (g *CAS) cas_login(username string, password string) bool {
 		MustConnect().NoDefaultDevice()
 
 	g.loadCookies(browser)
-	g.page = browser.MustPage("https://sfrz.gdgm.cn/authserver/login?service=https://eportal.gdgm.cn/login?service=https://eportal.gdgm.cn/new/index.html?browser=no").MustWindowFullscreen()
+	g.page = browser.MustPage(cas_sfrz).MustWindowFullscreen()
 
 	//异步处理弹窗事件
 	go g.page.EachEvent(func(e *proto.PageJavascriptDialogOpening) {
@@ -190,7 +194,7 @@ func (g *CAS) cas_wait() {
 
 func (g *CAS) NewJW(save_dir string) *JW {
 	return &JW{
-		cas:     g,
-		savedir: save_dir,
+		CAS:     g,
+		Savedir: save_dir,
 	}
 }
