@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -27,11 +28,11 @@ type Timetable struct {
 type Weektable struct {
 	Cname     string `json:"课程名称"`
 	Cter      string `json:"上课老师"`
-	ValidWeek []int  `json:"有课周次"` //课程会因为调课安排导致不连续
+	ValidWeek []int  `json:"有课周次"` //课程会因为调课安排导致不连续,所以直接生产有课数组
 }
 
 type table struct {
-	Day  []*Timetable `json:"日程:`
+	Day  []*Timetable `json:"日程:"`
 	Week []*Weektable `json:"周程"`
 }
 
@@ -67,7 +68,7 @@ var (
 	coure_score  = "https://jw.gdgm.cn/jsxsd/kscj/cjcx_list"
 	SInfo        *User
 	Score        *Avgcore
-	Table        *table
+	Table        = *&table{}
 )
 
 /**
@@ -152,11 +153,7 @@ func (g *JW) jw_save_today() {
 			text, err := p.Element("p")
 			if err == nil {
 				kb := strings.ToLower(text.MustProperty("title").String())
-				// fmt.Println(kb_2json(kb))
-				data, ok := kb_2s(kb)
-				if ok {
-					Table.Day = append(Table.Day, data)
-				}
+				kb_2s(kb)
 			}
 		}
 	}
@@ -176,14 +173,11 @@ func (g *JW) jw_save_today() {
 			Cter:      teacher,
 			ValidWeek: kb_week_trim(week),
 		})
-		// fmt.Printf("课程名：%s\n", courseName)
-		// fmt.Printf("教师：%s\n", teacher)
-		// fmt.Printf("周次：%s\n", week)
 	}
 
-	jsondata, err := json.Marshal(Table.Day)
+	jsondata, err := json.Marshal(Table)
 	if err == nil {
-		savebytes(jsondata, g.Savedir+"/week.json", "今日课表保存成功。")
+		savebytes(jsondata, g.Savedir+"/week.json", "学生课表保存成功。")
 		return
 	}
 	fmt.Println("今日课表保存失败。")
@@ -193,18 +187,43 @@ func (g *JW) jw_save_today() {
 // 输入： 1,4,7,9-11周,14-15周,17-18周
 // 输出：[1,4,7,9,10,11,14,15,17,18]
 func kb_week_trim(strweek string) []int {
-	//。。。。
-	return nil
+	re := regexp.MustCompile(`(\d+(-\d+)+|\d+)`)
+	matches := re.FindAllString(strweek, -1)
+	weekMap := make(map[int]bool)
+	for _, part := range matches {
+		if strings.Contains(part, "-") {
+			// 处理数字范围
+			rangeParts := strings.Split(part, "-")
+			if len(rangeParts) >= 2 {
+				start, _ := strconv.Atoi(rangeParts[0])
+				end, _ := strconv.Atoi(rangeParts[len(rangeParts)-1])
+				for i := start; i <= end; i++ {
+					weekMap[i] = true
+				}
+			}
+		} else {
+			// 处理单个数字
+			num, _ := strconv.Atoi(part)
+			weekMap[num] = true
+		}
+	}
+	// 将 map 中的周次提取为切片并排序
+	var weeks []int
+	for week := range weekMap {
+		weeks = append(weeks, week)
+	}
+	sort.Ints(weeks)
+	return weeks
 }
 
 // 将课表信息转换为json
-func kb_2s(text string) (*Timetable, bool) {
+func kb_2s(text string) {
 	regexPattern := `课程学分：([\d.]+)<br/>课程属性：([^<]+)<br/>课程名称：([^<]+)<br/>上课时间：([^<]+)<br/>上课地点：([^<]+)`
 	re := regexp.MustCompile(regexPattern)
 	match := re.FindStringSubmatch(text)
 	if len(match) != 6 {
 		fmt.Println("JSON:无法解析文本")
-		return &Timetable{}, false
+		return
 	}
 	table := &Timetable{
 		Credit:  match[1],
@@ -213,7 +232,7 @@ func kb_2s(text string) (*Timetable, bool) {
 		Ctime:   match[4],
 		Clocale: match[5],
 	}
-	return table, true
+	Table.Day = append(Table.Day, table)
 }
 
 type Myscore struct {
