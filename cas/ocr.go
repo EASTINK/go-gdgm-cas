@@ -11,13 +11,6 @@ import (
 	"strings"
 )
 
-type OCR struct {
-	API_KEY    string
-	SECRET_KEY string
-	Accurate   bool   //是否启动高精度模式
-	ImagePath  string //本地图片路径
-}
-
 /**
  * 将本地图片转换为BASE64编码后的URL
  * @param string  imagepath 图片路径
@@ -26,7 +19,7 @@ type OCR struct {
 func (o *OCR) capbase() string {
 	imageBytes, err := os.ReadFile(o.ImagePath)
 	if err != nil {
-		fmt.Println("打开验证码图片失败:", err)
+		LogPrintln("打开验证码图片失败:", err)
 		return "failds"
 	}
 	//编码base64->urlEncode
@@ -43,13 +36,13 @@ func (o *OCR) getAccessToken() string {
 	postData := fmt.Sprintf("grant_type=client_credentials&client_id=%s&client_secret=%s", o.API_KEY, o.SECRET_KEY)
 	resp, err := http.Post(url, "application/x-www-form-urlencoded", strings.NewReader(postData))
 	if err != nil {
-		fmt.Println(err)
+		LogPrintln(err)
 		return "failds"
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Println(err)
+		LogPrintln(err)
 		return "failds"
 	}
 	accessTokenObj := map[string]string{}
@@ -62,18 +55,6 @@ func (o *OCR) getAccessToken() string {
  * @return string 验证码
  */
 func (o *OCR) Cap() string {
-	const 通用文字识别标准 = "https://aip.baidubce.com/rest/2.0/ocr/v1/general_basic"
-	const 通用文字识别高精度 = "https://aip.baidubce.com/rest/2.0/ocr/v1/accurate_basic"
-
-	type WordsResult struct {
-		Words string `json:"words"`
-	}
-
-	type JSONData struct {
-		WordsResult    []WordsResult `json:"words_result"`
-		WordsResultNum int           `json:"words_result_num"`
-		LogID          int64         `json:"log_id"`
-	}
 
 	var url string
 	if o.Accurate {
@@ -86,25 +67,25 @@ func (o *OCR) Cap() string {
 	client := &http.Client{}
 	req, err := http.NewRequest("POST", url, payload)
 	if err != nil {
-		fmt.Println(err)
+		LogPrintln(err)
 		return "failds"
 	}
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Add("Accept", "application/json")
 	res, err := client.Do(req)
 	if err != nil {
-		fmt.Println(err)
+		LogPrintln(err)
 		return "failds"
 	}
 	defer res.Body.Close()
 	jsonData, err := io.ReadAll(res.Body)
 	if err != nil {
-		fmt.Println(err)
+		LogPrintln(err)
 		return "failds"
 	}
 	var data JSONData
 	if err := json.Unmarshal([]byte(jsonData), &data); err != nil {
-		fmt.Println("解析JSON失败:", err)
+		LogPrintln("解析JSON失败:", err)
 		return "failds"
 	}
 	// 获取words的值

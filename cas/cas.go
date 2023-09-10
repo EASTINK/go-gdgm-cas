@@ -1,43 +1,26 @@
 package cas
 
 import (
-	"encoding/base64"
-	"encoding/json"
-	"fmt"
-	"os"
-	"path/filepath"
-	"strconv"
-	"time"
-
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/launcher"
 	"github.com/go-rod/rod/lib/proto"
 )
 
-var (
-	cas_sfrz = "https://sfrz.gdgm.cn/authserver/login?service=https://eportal.gdgm.cn/login?service=https://eportal.gdgm.cn/new/index.html?browser=no"
-)
-
-type CAS struct {
-	Username   string
-	Password   string
-	Savedir    string
-	API_KEY    string
-	SECRET_KEY string
-	WaitTime   int64
-	page       *rod.Page
+func AK(value string) CASOptions {
+	return func(g *CAS) {
+		g.API_KEY = value
+	}
 }
 
-func NewCAS(username string, password string, savedir string, waittime int64,
-	ocr_api_key string, ocr_sec_key string) *CAS {
-	return &CAS{
-		Username:   username,
-		Password:   password,
-		Savedir:    savedir,
-		WaitTime:   waittime,
-		API_KEY:    ocr_api_key,
-		SECRET_KEY: ocr_sec_key,
-		page:       &rod.Page{},
+func SK(value string) CASOptions {
+	return func(g *CAS) {
+		g.SECRET_KEY = value
+	}
+}
+
+func Wtime(value int64) CASOptions {
+	return func(g *CAS) {
+		g.WaitTime = value
 	}
 }
 
@@ -48,15 +31,15 @@ func (g *CAS) AutoLogin() bool {
 	for {
 		logon = g.cas_login(g.Username, g.Password)
 		if logon {
-			fmt.Println("登陆成功")
+			LogPrintln("登陆成功")
 			break
 		}
 		if failds >= 2 {
-			fmt.Println("登陆失败")
+			LogPrintln("登陆失败")
 			break
 		}
 		failds += 1
-		fmt.Println("登陆出错，正在尝试重新提交登陆..." + strconv.Itoa(failds) + "/2")
+		LogPrintln("登陆出错，正在尝试重新提交登陆..." + i2s(failds) + "/2")
 	}
 	return logon
 }
@@ -74,7 +57,7 @@ func (g *CAS) CaptchCode(imgpath string) string {
 		}
 		//如何识别超过2次还是没有返回，立即中断
 		if cap_n >= 2 {
-			fmt.Println("验证码识别出错")
+			LogPrintln("验证码识别出错")
 			return "failds"
 		}
 		//尝试向OCR服务上传图片
@@ -94,13 +77,7 @@ func (g *CAS) CaptchCode(imgpath string) string {
 
 // 返回验证码的base64格式
 func (g *CAS) capbase64() string {
-	imageBytes, err := os.ReadFile(g.Savedir + "/captcha.jpg")
-	if err != nil {
-		fmt.Println("打开验证码图片失败:", err)
-		return ""
-	}
-	base64String := base64.StdEncoding.EncodeToString(imageBytes)
-	return base64String
+	return casbase64(g.Savedir)
 }
 
 /**
@@ -113,39 +90,24 @@ func (g *CAS) cas_logon() bool {
 	return title != "统一身份认证"
 }
 
-func savebytes(data []byte, savepath string, msg string) {
-	if err := os.MkdirAll(filepath.Dir(savepath), os.ModePerm); err == nil {
-		if err = os.WriteFile(savepath, data, os.ModePerm); err == nil {
-			fmt.Println(msg)
-		}
-	}
-}
-
 // 保存Cookies
 func (g *CAS) SaveCookies() {
 	cookies := g.page.Browser().MustGetCookies()
-	data, err := json.Marshal(cookies)
-	if err != nil {
-		fmt.Println("读取客户端Cookies失败")
-		return
-	}
-	savebytes(data, g.Savedir+"/Cookies.json", "客户端Cookies已保存")
+	saveCookies(g.Savedir, cookies)
 }
 
 // 加载Cookies
 func (g *CAS) loadCookies(browser *rod.Browser) {
-	data, err := os.ReadFile(g.Savedir + "/Cookies.json")
+	// cookies := (g.Savedir,cookcookies)
+	cookies, err := loadCookies(g.Savedir)
 	if err != nil {
-		fmt.Println("读取本地Cookies失败.")
 		return
 	}
-	var cookies []*proto.NetworkCookieParam
-	json.Unmarshal(data, &cookies)
 	err = browser.SetCookies(cookies)
 	if err != nil {
-		fmt.Println("加载本地Cookies失败")
+		LogPrintln("加载本地Cookies失败")
 	} else {
-		fmt.Println("已启用本地Cookies")
+		LogPrintln("已启用本地Cookies")
 	}
 }
 
@@ -175,8 +137,15 @@ func (g *CAS) cas_login(username string, password string) bool {
 		jpg, err := cap.Elements("img")
 		if err == nil && len(jpg) > 0 {
 			//保存到本地，等待前端交互
-			jpg[0].MustWaitStable().MustScreenshot("b.jpg")
-			if code := g.CaptchCode("b.jpg"); code != "failds" {
+			jpg[0].MustWaitStable().MustScreenshot(g.Savedir + "/caplogon.jpg")
+			var code string
+			//判别有没有传进来ak&sk
+			if g.API_KEY != "" && g.SECRET_KEY != "" {
+				code = g.CaptchCode(g.Savedir + "/caplogon.jpg")
+			} else {
+				code = input_code()
+			}
+			if code != "failds" {
 				cap.MustElements("#captchaResponse")[0].MustInput(code)
 			} //如果识别失败会返回failds,随着表单提交一起刷新
 		}
@@ -189,7 +158,7 @@ func (g *CAS) cas_login(username string, password string) bool {
 
 // 等待一段时间
 func (g *CAS) cas_wait() {
-	time.Sleep(time.Duration(g.WaitTime) * time.Second)
+	caswait(g.WaitTime)
 }
 
 func (g *CAS) NewJW(save_dir string) *JW {
@@ -197,4 +166,28 @@ func (g *CAS) NewJW(save_dir string) *JW {
 		CAS:     g,
 		Savedir: save_dir,
 	}
+}
+
+// @params :数字工贸帐号，密码，验证码保存地址，每步等待时间，百度云ak,sk
+func NewCAS(username string, password string, savedir string,
+	options ...CASOptions) *CAS {
+	///, waittime int64
+	//ocr_api_key string, ocr_sec_key string) *CAS {
+	cas := &CAS{
+		Username: username,
+		Password: password,
+		Savedir:  savedir,
+		// WaitTime:   waittime,
+		// API_KEY:    ocr_api_key,
+		// SECRET_KEY: ocr_sec_key,
+		page: &rod.Page{},
+	}
+	for _, option := range options {
+		option(cas)
+	}
+	if cas.WaitTime == 0 {
+		cas.WaitTime = 1 //至少等待1秒
+	}
+
+	return cas
 }

@@ -1,74 +1,7 @@
 package cas
 
 import (
-	"encoding/json"
-	"fmt"
-	"regexp"
-	"sort"
-	"strconv"
-	"strings"
-	"time"
-)
-
-type JW struct {
-	CAS     *CAS
-	Savedir string
-	// today_course_path string
-	// course_score_path string
-}
-
-type Timetable struct {
-	Credit  string `json:"课程学分"`
-	Cprop   string `json:"课程属性"`
-	Cname   string `json:"课程名称"`
-	Ctime   string `json:"上课时间"`
-	Clocale string `json:"上课地点"`
-}
-
-type Weektable struct {
-	Cname     string `json:"课程名称"`
-	Cter      string `json:"上课老师"`
-	ValidWeek []int  `json:"有课周次"` //课程会因为调课安排导致不连续,所以直接生产有课数组
-}
-
-type table struct {
-	Day  []*Timetable `json:"日程:"`
-	Week []*Weektable `json:"周程"`
-}
-
-/*
-学生姓名:
-学生编号：
-所属院系：
-专业名称：
-班级名称：
-*/
-type User struct {
-	Sname  string `json:"学生姓名"`
-	Stuid  string `json:"学生编号"`
-	Stuyx  string `json:"所属院系"`
-	Smajor string `json:"专业名称"`
-	Sclass string `json:"班级名称"`
-	SWeek  *Week  `json:"学期周"`
-}
-
-type Week struct {
-	CurrentWeek      string    `json:"当前周"` //当前所在周
-	startDate        time.Time //学期开始日期
-	currentDate      time.Time //今日日期
-	currentWeekStart time.Time //本周起始日期
-	prevWeekStart    time.Time //上一周起始日期
-	nextWeekStart    time.Time //下一周起始日期
-}
-
-var (
-	cas_jw       = "https://eportal.gdgm.cn/appShow?appId=5759540940956162"
-	jw_info      = "https://jw.gdgm.cn/jsxsd/framework/xsMain_new.jsp"
-	today_course = "https://jw.gdgm.cn/jsxsd/framework/main_index_loadkb.jsp?rq="
-	coure_score  = "https://jw.gdgm.cn/jsxsd/kscj/cjcx_list"
-	SInfo        *User
-	Score        *Avgcore
-	Table        = *&table{}
+	"reflect"
 )
 
 /**
@@ -88,7 +21,7 @@ func (g *JW) jw_logon() bool {
 	if err == nil {
 		return title.Title != "登录"
 	} else {
-		fmt.Println("检查登陆状态出错")
+		LogPrintln("检查登陆状态出错")
 	}
 	return false
 }
@@ -108,7 +41,7 @@ func (g *JW) Jw_cas_start() {
 			g.jw_save_score()
 		}
 	} else {
-		fmt.Println("教务网好像掉线了呢？")
+		LogPrintln("教务网好像掉线了呢？")
 	}
 }
 func (g *JW) jw_save_info() {
@@ -126,23 +59,18 @@ func (g *JW) jw_save_info() {
 	// //班级
 	SInfo.Sclass = g.CAS.page.MustElementX("/html/body/div/div[1]/div[1]/div[1]/div[2]/div/div[6]/div[2]").MustText()
 	SInfo.SWeek = NewSweek(g.CAS.page.MustElementX(`/html/body/div/div[1]/div[1]/div[2]/div[2]/div/div/div[1]/div[1]/span`).MustText())
-	fmt.Println("获得教务基础信息 —— 当前教学周为" + SInfo.SWeek.CurrentWeek)
-	jsondata, err := json.Marshal(SInfo)
-	if err == nil {
-		savebytes(jsondata, g.Savedir+"/Sinfo.json", "学生信息已保存")
-	} else {
-		fmt.Println("学生信息保存失败")
-	}
+	LogPrintln("获得教务基础信息 —— 当前教学周为" + SInfo.SWeek.CurrentWeek)
+	savejson(SInfo, g.Savedir+"/Sinfo.json", "学生信息已保存", "学生信息保存失败")
 }
 
 // 访问当天课表并保存数据
 func (g *JW) jw_save_today() {
 	Table.Day = Table.Day[:0]
 	//转到当天表
-	g.CAS.page.Navigate(today_course + time.Now().Format(time.DateOnly))
+	g.CAS.page.Navigate(todaycourse_url())
 	g.CAS.cas_wait()
 	if !g.jw_logon() {
-		fmt.Println("登陆状态掉了？")
+		LogPrintln("登陆状态掉了？")
 		return
 	}
 	tr := g.CAS.page.MustElements("#tab1 > tbody > tr")
@@ -152,7 +80,7 @@ func (g *JW) jw_save_today() {
 		for _, p := range td {
 			text, err := p.Element("p")
 			if err == nil {
-				kb := strings.ToLower(text.MustProperty("title").String())
+				kb := s2l(text.MustProperty("title").String())
 				kb_2s(kb)
 			}
 		}
@@ -161,7 +89,7 @@ func (g *JW) jw_save_today() {
 	if bz == "" {
 		Table.Week = nil
 	}
-	matches := regexp.MustCompile(`([^ ]+) ([^ ]+) ([^;]+);`).FindAllStringSubmatch(strings.Trim(bz, "\t"), -1)
+	matches := weekTrim(bz)
 	// 提取课程信息
 	for _, match := range matches {
 		courseName := match[1]
@@ -174,139 +102,33 @@ func (g *JW) jw_save_today() {
 			ValidWeek: kb_week_trim(week),
 		})
 	}
-
-	jsondata, err := json.Marshal(Table)
-	if err == nil {
-		savebytes(jsondata, g.Savedir+"/week.json", "学生课表保存成功。")
-		return
-	}
-	fmt.Println("今日课表保存失败。")
-}
-
-// 输入课程有效周
-// 输入： 1,4,7,9-11周,14-15周,17-18周
-// 输出：[1,4,7,9,10,11,14,15,17,18]
-func kb_week_trim(strweek string) []int {
-	re := regexp.MustCompile(`(\d+(-\d+)+|\d+)`)
-	matches := re.FindAllString(strweek, -1)
-	weekMap := make(map[int]bool)
-	for _, part := range matches {
-		if strings.Contains(part, "-") {
-			// 处理数字范围
-			rangeParts := strings.Split(part, "-")
-			if len(rangeParts) >= 2 {
-				start, _ := strconv.Atoi(rangeParts[0])
-				end, _ := strconv.Atoi(rangeParts[len(rangeParts)-1])
-				for i := start; i <= end; i++ {
-					weekMap[i] = true
-				}
-			}
-		} else {
-			// 处理单个数字
-			num, _ := strconv.Atoi(part)
-			weekMap[num] = true
-		}
-	}
-	// 将 map 中的周次提取为切片并排序
-	var weeks []int
-	for week := range weekMap {
-		weeks = append(weeks, week)
-	}
-	sort.Ints(weeks)
-	return weeks
-}
-
-// 将课表信息转换为json
-func kb_2s(text string) {
-	regexPattern := `课程学分：([\d.]+)<br/>课程属性：([^<]+)<br/>课程名称：([^<]+)<br/>上课时间：([^<]+)<br/>上课地点：([^<]+)`
-	re := regexp.MustCompile(regexPattern)
-	match := re.FindStringSubmatch(text)
-	if len(match) != 6 {
-		fmt.Println("JSON:无法解析文本")
-		return
-	}
-	table := &Timetable{
-		Credit:  match[1],
-		Cprop:   match[2],
-		Cname:   match[3],
-		Ctime:   match[4],
-		Clocale: match[5],
-	}
-	Table.Day = append(Table.Day, table)
-}
-
-type Myscore struct {
-	Semester         string `json:"开课学期"`  //学期
-	CourseId         string `json:"课程编号"`  //课程编号
-	CourseName       string `json:"课程名称"`  //课程名称
-	GroupName        string `json:"分组名"`   //课程分组
-	Score            string `json:"成绩"`    //课程成绩
-	ScoreMark        string `json:"成绩标识"`  //成绩标识
-	Credit           string `json:"学分"`    //课程学分
-	Cperiod          string `json:"总学时"`   //课程学时
-	CGPA             string `json:"绩点"`    //课程绩点
-	ReSemester       string `json:"补重学期"`  //补重学期
-	AssessmentMethod string `json:"考核方式"`  //考核方式
-	AssessmentType   string `json:"考试性质"`  //考试性质
-	CourseProperties string `json:"课程属性"`  //课程属性
-	CourseType       string `json:"课程性质"`  //课程性质
-	CourseCategory   string `json:"通选课类别"` //课程类别
+	savejson(Table, g.Savedir+"/week.json", "学生课表保存成功.", "学生课表保存失败.")
 }
 
 func (c *Myscore) init() {
-	if c.Semester == "" {
-		c.Semester = "--"
+	defaultValues := map[string]string{
+		"Semester":         "--",
+		"CourseId":         "--",
+		"CourseName":       "--",
+		"GroupName":        "--",
+		"Score":            "--",
+		"ScoreMark":        "--",
+		"Credit":           "--",
+		"Cperiod":          "--",
+		"CGPA":             "--",
+		"ReSemester":       "--",
+		"AssessmentMethod": "--",
+		"AssessmentType":   "--",
+		"CourseProperties": "--",
+		"CourseType":       "--",
+		"CourseCategory":   "--",
 	}
-	if c.CourseId == "" {
-		c.CourseId = "--"
+	for fName, dValue := range defaultValues {
+		field := reflect.ValueOf(c).Elem().FieldByName(fName)
+		if field.Kind() == reflect.String && field.Len() == 0 {
+			field.SetString(dValue)
+		}
 	}
-	if c.CourseName == "" {
-		c.CourseName = "--"
-	}
-	if c.GroupName == "" {
-		c.GroupName = "--"
-	}
-	if c.Score == "" {
-		c.Score = "--"
-	}
-	if c.ScoreMark == "" {
-		c.ScoreMark = "--"
-	}
-	if c.Credit == "" {
-		c.Credit = "--"
-	}
-	if c.Cperiod == "" {
-		c.Cperiod = "--"
-	}
-	if c.CGPA == "" {
-		c.CGPA = "--"
-	}
-	if c.ReSemester == "" {
-		c.ReSemester = "--"
-	}
-	if c.AssessmentMethod == "" {
-		c.AssessmentMethod = "--"
-	}
-	if c.AssessmentType == "" {
-		c.AssessmentType = "--"
-	}
-	if c.CourseProperties == "" {
-		c.CourseProperties = "--"
-	}
-	if c.CourseType == "" {
-		c.CourseType = "--"
-	}
-	if c.CourseCategory == "" {
-		c.CourseCategory = "--"
-	}
-}
-
-type Avgcore struct {
-	CourseNumber int64   `json:"所修门数"`   //所修门数
-	CourseTotal  float64 `json:"所修总学分"`  //所修总学分
-	ASGPA        float64 `json:"平均学分绩点"` //平均学分绩点
-	ACGPA        float64 `json:"平均成绩"`   //平均成绩
-	AvgInfo      []*Myscore
 }
 
 func (g *JW) jw_save_score() {
@@ -314,114 +136,23 @@ func (g *JW) jw_save_score() {
 	g.CAS.page.Navigate(coure_score)
 	g.CAS.cas_wait()
 	if !g.jw_logon() {
-		fmt.Printf("登陆状态掉了？")
+		LogPrintln("登陆状态掉了？")
 		return
 	}
 	div, err := g.CAS.page.ElementsX("/html/body/div") //[0].MustText()
 	g.CAS.cas_wait()
 	if len(div) <= 0 || err != nil {
-		fmt.Printf("成绩解析出错")
+		LogPrintln("成绩解析出错")
 		return
 	}
 	t, err := div[0].Text()
 	g.CAS.cas_wait()
 	if err != nil {
-		fmt.Printf("成绩解析出错")
+		LogPrintln("成绩解析出错")
 		return
 	}
-	text := strings.Split(t, "\n")
-	// text :=
-	re, _ := regexp.Compile(`[+-]?\d+(\.\d+)?`)
-	avgtext := re.FindAllString(text[0], -1)
-	number, _ := strconv.ParseInt(avgtext[0], 10, 64)
-	total, _ := strconv.ParseFloat(avgtext[1], 64)
-	asgpa, _ := strconv.ParseFloat(avgtext[2], 64)
-	acgpa, _ := strconv.ParseFloat(avgtext[3], 64)
-	Score = &Avgcore{
-		CourseNumber: number,
-		CourseTotal:  total,
-		ASGPA:        asgpa,
-		ACGPA:        acgpa,
-		AvgInfo:      []*Myscore{},
-	}
-	for _, item := range text[2:] {
-		c := strings.Split(item, "\t")
-		k := &Myscore{
-			Semester:         c[1],
-			CourseId:         c[2],
-			CourseName:       c[3],
-			GroupName:        c[4],
-			Score:            c[5],
-			ScoreMark:        c[6],
-			Credit:           c[7],
-			Cperiod:          c[8],
-			CGPA:             c[9],
-			ReSemester:       c[10],
-			AssessmentMethod: c[11],
-			AssessmentType:   c[12],
-			CourseProperties: c[13],
-			CourseType:       c[14],
-			CourseCategory:   c[15],
-		}
-		k.init()
-		Score.AvgInfo = append(Score.AvgInfo, k)
-	}
-	jsondata, err := json.Marshal(Score)
-	if err == nil {
-		savebytes(jsondata, g.Savedir+"/score.json", "学生成绩更新成功。")
-		return
-	}
-	fmt.Println("学生成绩更新失败。")
-}
-
-// 计算各类的起始日期
-func getWeekInfo(startDate time.Time) (time.Time, time.Time, time.Time, time.Time) {
-	// 计算当前日期距离起始日期的天数
-	days := int(time.Now().Sub(startDate).Hours() / 24)
-	// 计算当前所在的周数
-	currentWeek := (days / 7) + 1
-	// 计算本周的起始日期
-	currentWeekStart := startDate.AddDate(0, 0, (currentWeek-1)*7)
-	// 计算下一周的起始日期
-	nextWeekStart := currentWeekStart.AddDate(0, 0, 7)
-	// 计算上一周的起始日期
-	prevWeekStart := currentWeekStart.AddDate(0, 0, -7)
-	return time.Now(), currentWeekStart, nextWeekStart, prevWeekStart
-}
-
-// 依据当前周 返回本学期起始时间
-func getStartDate(weeks int) time.Time {
-	// 往前推算 weeks 周，每周 7 天
-	startDate := time.Now().AddDate(0, 0, -(weeks-1)*7)
-	// 找到最近的周日
-	for startDate.Weekday() != time.Sunday {
-		startDate = startDate.AddDate(0, 0, -1)
-	}
-	return startDate
-}
-
-func NewSweek(text string) *Week {
-	//text=第X周 ？ 当前日期不在教学周历内
-	var res string
-	if res = regexp.MustCompile("[0-9]+").FindString(text); res == "" {
-		fmt.Println("获取学期周信息失败")
-		return nil
-	}
-	cweek, err := strconv.Atoi(res)
-	if err != nil {
-		fmt.Println("获取学期周信息失败")
-		return nil
-	}
-	startDate := getStartDate(cweek)
-	currentDate, currentWeekStart, nextWeekStart, prevWeekStart := getWeekInfo(startDate)
-	return &Week{
-		CurrentWeek:      text,
-		startDate:        startDate,
-		currentDate:      currentDate,
-		currentWeekStart: currentWeekStart,
-		prevWeekStart:    prevWeekStart,
-		nextWeekStart:    nextWeekStart,
-	}
+	Score := scoreTrim(t)
+	savejson(Score.AvgInfo, g.Savedir+"/score.json", "学生成绩更新成功.", "学生成绩更新失败.")
 }
 
 // 返回下一周次课表
