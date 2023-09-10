@@ -1,0 +1,25 @@
+{
+    "datas": {
+        "courseList": [
+            {
+                "teaRealName": "张大仙",
+                "name": "HTML5",
+                "id": 13642
+            }
+        ],
+        "hwtList": [
+            {
+                "courseName": "HTML5",
+                "startDateTime": "2022-12-19 09:26",
+                "hwStatus": true,
+                "id": 27390,
+                "title": "3、页面水平菜单第三种效果制作",
+                "deadline": "2024-12-31 00:00",
+                "courseId": 13642
+            }
+        ]
+    },
+    "sessionid": "---------------",
+    "status": 1,
+    "error": null
+}
