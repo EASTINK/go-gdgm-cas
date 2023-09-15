@@ -16,6 +16,7 @@ func main() {
 	)
 	//数字工贸帐号密码
 	GDGM := cas.NewCAS("数字工贸帐号", "数字工贸密码", save_dir, cas.Wtime(int64(waitsecond)), cas.AK(API_KEY), cas.SK(SECRET_KEY))
+	defer GDGM.SaveCookies()
 	if !GDGM.AutoLogin() {
 		cas.LogPrintln("数字工贸登陆失败-----即将退出程序..")
 		return
@@ -34,6 +35,7 @@ func main() {
 	GDGM_UMOOC.AutoLogin(true)
 	//保存数据
 	GDGM_UMOOC.Hwtask(save_dir).Save()
-	defer GDGM.SaveCookies()
-
+	//一卡通
+	card := GDGM.NewCard(save_dir)
+	card.Card_cas_start()
 }

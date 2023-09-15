@@ -168,6 +168,13 @@ func (g *CAS) NewJW(save_dir string) *JW {
 	}
 }
 
+func (g *CAS) NewCard(save_dir string) *Card {
+	return &Card{
+		CAS:     g,
+		Savedir: save_dir,
+	}
+}
+
 // @params :数字工贸帐号，密码，验证码保存地址，每步等待时间，百度云ak,sk
 func NewCAS(username string, password string, savedir string,
 	options ...CASOptions) *CAS {

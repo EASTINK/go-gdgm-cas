@@ -156,6 +156,33 @@ type Myscore struct {
 	CourseCategory   string `json:"通选课类别"` //课程类别
 }
 
+type Card struct {
+	CAS     *CAS
+	Savedir string
+	search  map[string]map[string]map[string]string
+}
+
+type Room struct {
+	//Unique ID
+	RoomId string `json:"roomNum"`
+	//房间号
+	RoomName string `json:"room"`
+	//楼栋名
+	Building string `json:"building"`
+	//楼栋id
+	BuildingNo string `json:"buildingNo"`
+	//荔湾白云/天河校区的id : 2/1/NULL
+	SchoolAreaNo string `json:"schoolAreaNo"`
+	//校区名 : 荔湾/白云/NULL
+	SchoolArea string `json:"schoolArea"`
+}
+
+type RoomList struct {
+	Ret      bool   `json:"ret"`
+	Msg      string `json:"msg"`
+	RoomList []Room `json:"obj"`
+}
+
 // --------------
 const (
 	cas_sfrz = "https://sfrz.gdgm.cn/authserver/login?service=https://eportal.gdgm.cn/login?service=https://eportal.gdgm.cn/new/index.html?browser=no"
@@ -192,6 +219,20 @@ const (
 	jw_info      = "https://jw.gdgm.cn/jsxsd/framework/xsMain_new.jsp"
 	today_course = "https://jw.gdgm.cn/jsxsd/framework/main_index_loadkb.jsp?rq="
 	coure_score  = "https://jw.gdgm.cn/jsxsd/kscj/cjcx_list"
+	//----------------------
+	//跳转一卡通接入认证
+	cas_card = "https://eportal.gdgm.cn/appShow?appId=6360818839724001"
+	//白云荔湾 RoomFlag
+	bylw_flag = "CHANGGONGGONGMAO"
+	//天河	RoomFlag
+	th_flag = "MINGHANNORMAL"
+	//白云荔湾校区的房间列表
+	card_room_bylw_list = "https://carduser.gdgm.cn/powerfee/getRoomInfo?implType=" + bylw_flag
+	//天河校区房间列表
+	card_room_th_list = "https://carduser.gdgm.cn/powerfee/getRoomInfo?implType=" + th_flag
+	//查询房间电费 body{implType:RoomFlag,roomNum:int}
+	card_room_Balance = "https://carduser.gdgm.cn/powerfee/getBalance" //
+
 )
 
 var (
