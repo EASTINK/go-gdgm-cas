@@ -9,8 +9,10 @@ import (
 	"io"
 	"log"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -293,8 +295,10 @@ func input_code() string {
 
 // save logfile
 func Log_save() *os.File {
-	if err := os.MkdirAll(filepath.Dir(`./log/`), os.ModePerm); err == nil {
-		if logFile, err := os.OpenFile(`./log/`+time.Now().Format(time.DateTime)+`.log`, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0666); err == nil {
+	LogPrintln(GetCurrentAbPath() + `/log/`)
+	if err := os.MkdirAll(filepath.Dir(GetCurrentAbPath()+`/log/`), os.ModePerm); err == nil {
+		//格式改动 win下不支持名字带":" | 注意在Linux下不要使用go run .,你应该通过build或者IDE的debug,不然拿到的目录是错的
+		if logFile, err := os.OpenFile(GetCurrentAbPath()+`/log/`+time.Now().Format("2006-01-02 15-04-05")+`.log`, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0666); err == nil {
 			multiWriter := io.MultiWriter(os.Stdout, logFile)
 			log.SetOutput(multiWriter)
 			return logFile
@@ -305,4 +309,78 @@ func Log_save() *os.File {
 		panic(err)
 	}
 
+}
+
+// 最终方案-全兼容
+func GetCurrentAbPath() string {
+	dir := getCurrentAbPathByExecutable()
+	if strings.Contains(dir, getTmpDir()) {
+		return getCurrentAbPathByCaller()
+	}
+	return dir
+}
+
+// 获取当前执行文件绝对路径
+func getCurrentAbPathByExecutable() string {
+	exePath, err := os.Executable()
+	if err != nil {
+		log.Fatal(err)
+	}
+	res, _ := filepath.EvalSymlinks(filepath.Dir(exePath))
+	return res
+}
+
+// 获取系统临时目录，兼容go run
+func getTmpDir() string {
+	dir := os.Getenv("TEMP")
+	if dir == "" {
+		dir = os.Getenv("TMP")
+	}
+	res, _ := filepath.EvalSymlinks(dir)
+	return res
+}
+
+func getCurrentAbPathByCaller() string {
+	var abPath string
+	_, filename, _, ok := runtime.Caller(0)
+	if ok {
+		abPath = path.Dir(filename)
+	}
+	return abPath
+}
+
+// params: level int
+// 返回rooms map-0-3级菜单
+func Rooms_menu(source_map map[string]map[string]map[string]string, key ...string) []string {
+	var (
+		menu1 []string
+		menu2 []string
+		menu3 []string
+	)
+	for i, opt := range key {
+		if i == 0 && len(key) >= 1 {
+			//keys()
+			for l, _ := range source_map[opt] {
+				menu2 = append(menu2, l)
+			}
+			// return menu2 由于后面还有可能要处理 所以不能直接return
+		}
+		if i == 1 && len(key) == 2 {
+			for l, _ := range source_map[key[0]][opt] {
+				menu3 = append(menu3, l)
+			}
+			return menu3
+		}
+	}
+	if len(key) == 0 {
+		for l, _ := range source_map {
+			menu1 = append(menu1, l)
+		}
+		return menu1
+	}
+
+	if len(key) == 1 {
+		return menu2
+	}
+	return nil
 }

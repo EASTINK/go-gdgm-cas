@@ -159,7 +159,7 @@ type Myscore struct {
 type Card struct {
 	CAS     *CAS
 	Savedir string
-	search  map[string]map[string]map[string]string
+	Search  map[string]map[string]map[string]string
 }
 
 type Room struct {
@@ -181,6 +181,20 @@ type RoomList struct {
 	Ret      bool   `json:"ret"`
 	Msg      string `json:"msg"`
 	RoomList []Room `json:"obj"`
+}
+
+type RoomBill struct {
+	RoomNum                  string `json:"roomNum"`
+	FormatPowerBalanceStr    string `json:"formatPowerBalanceStr"`
+	FormatWaterBalanceStr    string `json:"formatWaterBalanceStr"`
+	FormatHotWaterBalanceStr string `json:"formatHotWaterBalanceStr"`
+	LastDate                 string `json:"lastDate"`
+}
+
+type Roominfo struct {
+	Ret  bool     `json:"ret"`
+	Msg  string   `json:"msg"`
+	Bill RoomBill `json:"obj"`
 }
 
 // --------------

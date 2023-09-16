@@ -43,32 +43,38 @@ func (c *Card) Card_cas_start() {
 func (c *Card) card_save_rooms() {
 	var bylw_roomlist RoomList
 	var th_roomlist RoomList
-	c.search = make(map[string]map[string]map[string]string)
+	c.Search = make(map[string]map[string]map[string]string)
 	bylw_byte := c.Post(card_room_bylw_list, "")
 	json.Unmarshal(bylw_byte, &bylw_roomlist)
 	if bylw_roomlist.Ret {
 		for _, v := range bylw_roomlist.RoomList {
-			c.adds(c.search, v.SchoolArea, v.Building, v.RoomName, v.RoomId)
+			c.adds(c.Search, v.SchoolArea, v.Building, v.RoomName, v.RoomId)
 		}
 	}
 	th_byte := c.Post(card_room_th_list, "")
 	json.Unmarshal(th_byte, &th_roomlist)
 	if th_roomlist.Ret {
 		for _, v := range th_roomlist.RoomList {
-			c.adds(c.search, v.SchoolArea, v.Building, v.RoomName, v.RoomId)
+			c.adds(c.Search, v.SchoolArea, v.Building, v.RoomName, v.RoomId)
 		}
 	}
-	savejson(c.search, c.Savedir+"/rooms.json", "房间信息已保存", "房间信息保存失败")
+	savejson(c.Search, c.Savedir+"/rooms.json", "房间列表已保存", "房间列表保存失败")
 }
 
 func (c *Card) Post(url string, body string) []byte {
 	c.CAS.cas_wait()
 	command := `fetch("` + url + `", {
 		"headers": {
-		  "accept": "*/*",
-		  "accept-language": "zh-CN,zh;q=0.9,en;q=0.8",
-		  "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
-		  "sec-ch-ua": "\"Chromium\";v=\"116\", \"Not)A;Brand\";v=\"24\", \"Google Chrome\";v=\"116\"",
+			"accept": "*/*",
+			"accept-language": "zh-CN,zh;q=0.9,en;q=0.8",
+			"content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+			"sec-ch-ua": "\"Chromium\";v=\"116\", \"Not)A;Brand\";v=\"24\", \"Google Chrome\";v=\"116\"",
+			"sec-ch-ua-mobile": "?0",
+			"sec-ch-ua-platform": "\"Linux\"",
+			"sec-fetch-dest": "empty",
+			"sec-fetch-mode": "cors",
+			"sec-fetch-site": "same-origin",
+			"x-requested-with": "XMLHttpRequest"
 		},
 		"referrer": "https://carduser.gdgm.cn/powerfee/index",
 		"referrerPolicy": "strict-origin-when-cross-origin",
@@ -99,4 +105,37 @@ func (c *Card) adds(item map[string]map[string]map[string]string, schoolArea str
 		item[schoolArea][building][room] = roomNum
 	}
 
+}
+
+/*
+查询房间电费
+
+params: 校区|楼栋|房间号
+返回:
+
+	Bill{str(balance,water,hotwater,lastdate)}
+	其中水费和热水费没有实际传回数据,lastdate只有天河校区有数据
+*/
+func (c *Card) Search_elec_Bill(schoolArea string, building string, roomno string) (any, error) {
+	//从map取回roomid
+	id := c.Search[schoolArea][building][roomno]
+	//设置body
+	var body string
+	if schoolArea != "工贸天河校区" {
+		body = "implType=" + bylw_flag
+	} else {
+		body = "implType=" + th_flag
+	}
+	body += "&roomNum=" + id
+	//查询房间信息
+	ele_byte := c.Post(card_room_Balance, body)
+	var res Roominfo
+	err := json.Unmarshal(ele_byte, &res)
+	if err != nil {
+		return nil, err
+	}
+	if !res.Ret {
+		return nil, err
+	}
+	return res.Bill, nil
 }
